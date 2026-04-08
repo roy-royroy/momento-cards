@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Momento — Open Your Message</title>
+  <meta name="description" content="Someone sent you a Momento card with a personal video message inside." />
+
+  <!-- Prevent indexing of individual card pages -->
+  <meta name="robots" content="noindex, nofollow" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Supabase JS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cream:      #faf8f4;
+      --cream-dark: #f2ede4;
+      --ink:        #1a1714;
+      --ink-soft:   #4a4540;
+      --ink-muted:  #8a8278;
+      --gold:       #b8975a;
+      --gold-light: #d4b07a;
+      --gold-dark:  #8c6e3a;
+      --white:      #ffffff;
+      --red:        #c0392b;
+      --green:      #27704a;
+
+      --radius-sm:   8px;
+      --radius-md:   16px;
+      --radius-lg:   24px;
+      --radius-pill: 999px;
+
+      --shadow-sm:   0 2px 8px rgba(26,23,20,0.08);
+      --shadow-md:   0 8px 32px rgba(26,23,20,0.1), 0 2px 8px rgba(26,23,20,0.06);
+      --shadow-lg:   0 20px 60px rgba(26,23,20,0.14), 0 4px 16px rgba(26,23,20,0.08);
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'Inter', sans-serif;
+      background: var(--cream);
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── LAYOUT SHELL ─── */
+    .page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 20px 48px;
+    }
+
+    /* ─── BRAND HEADER ─── */
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 40px;
+      align-self: center;
+    }
+
+    .brand-logo {
+      font-family: 'Playfair Display', serif;
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--ink);
+      letter-spacing: -0.3px;
+      text-decoration: none;
+    }
+
+    .brand-logo span { color: var(--gold); }
+
+    .brand-sep {
+      width: 1px;
+      height: 16px;
+      background: rgba(26,23,20,0.15);
+    }
+
+    .brand-sub {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--ink-muted);
+      letter-spacing: 0.3px;
+    }
+
+    /* ─── CARD CONTAINER ─── */
+    .card {
+      width: 100%;
+      max-width: 480px;
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+    }
+
+    .card-accent {
+      height: 4px;
+      background: linear-gradient(90deg, var(--gold-dark), var(--gold), var(--gold-light));
+    }
+
+    .card-body {
+      padding: 36px 32px;
+    }
+
+    @media (max-width: 480px) {
+      .card-body { padding: 28px 20px; }
+    }
+
+    /* ─── STATE: LOADING ─── */
+    #state-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 48px 32px;
+      text-align: center;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--cream-dark);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text {
+      font-size: 14px;
+      color: var(--ink-muted);
+      font-weight: 300;
+    }
+
+    /* ─── STATE: UPLOAD ─── */
+    .upload-header { margin-bottom: 28px; }
+
+    .milestone-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      background: rgba(184,151,90,0.1);
+      border: 1px solid rgba(184,151,90,0.25);
+      border-radius: var(--radius-pill);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--gold-dark);
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+
+    .milestone-tag::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--gold);
+    }
+
+    .upload-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 26px;
+      font-weight: 500;
+      color: var(--ink);
+      line-height: 1.15;
+      letter-spacing: -0.4px;
+      margin-bottom: 8px;
+    }
+
+    .upload-sub {
+      font-size: 14px;
+      font-weight: 300;
+      color: var(--ink-soft);
+      line-height: 1.6;
+    }
+
+    /* Drop zone */
+    .dropzone {
+      position: relative;
+      border: 2px dashed rgba(184,151,90,0.35);
+      border-radius: var(--radius-md);
+      background: rgba(184,151,90,0.04);
+      padding: 40px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      margin-bottom: 20px;
+    }
+
+    .dropzone.drag-over {
+      border-color: var(--gold);
+      background: rgba(184,151,90,0.1);
+    }
+
+    .dropzone.has-file {
+      border-color: var(--gold);
+      border-style: solid;
+      background: rgba(184,151,90,0.06);
+    }
+
+    .dropzone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .dropzone-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 14px;
+      color: var(--gold);
+    }
+
+    .dropzone-label {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--ink);
+      margin-bottom: 6px;
+    }
+
+    .dropzone-hint {
+      font-size: 12px;
+      font-weight: 300;
+      color: var(--ink-muted);
+      line-height: 1.5;
+    }
+
+    /* Selected file preview */
+    .file-preview {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      background: var(--cream);
+      border-radius: var(--radius-sm);
+      margin-bottom: 20px;
+    }
+
+    .file-preview.visible { display: flex; }
+
+    .file-preview-icon {
+      width: 36px;
+      height: 36px;
+      background: rgba(184,151,90,0.12);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--gold-dark);
+    }
+
+    .file-info { flex: 1; min-width: 0; }
+
+    .file-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-size {
+      font-size: 11px;
+      color: var(--ink-muted);
+      font-weight: 300;
+    }
+
+    .file-clear {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--ink-muted);
+      padding: 4px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      transition: color 0.2s;
+    }
+
+    .file-clear:hover { color: var(--red); }
+
+    /* Progress bar */
+    .progress-wrap {
+      display: none;
+      margin-bottom: 20px;
+    }
+
+    .progress-wrap.visible { display: block; }
+
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--ink-muted);
+      margin-bottom: 8px;
+    }
+
+    .progress-bar-bg {
+      height: 4px;
+      background: var(--cream-dark);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--gold-dark), var(--gold));
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    /* Upload button */
+    .btn-upload {
+      width: 100%;
+      padding: 15px 24px;
+      background: var(--ink);
+      color: var(--white);
+      font-size: 15px;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      border: none;
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      letter-spacing: -0.2px;
+      transition: background 0.2s, transform 0.15s, box-shadow 0.2s, opacity 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-upload:hover:not(:disabled) {
+      background: var(--gold-dark);
+      box-shadow: 0 8px 24px rgba(140,110,58,0.3);
+      transform: translateY(-1px);
+    }
+
+    .btn-upload:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* Feedback messages */
+    .msg {
+      display: none;
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 400;
+      line-height: 1.5;
+      margin-bottom: 16px;
+    }
+
+    .msg.visible { display: block; }
+    .msg.error { background: rgba(192,57,43,0.08); color: var(--red); border: 1px solid rgba(192,57,43,0.2); }
+    .msg.info  { background: rgba(184,151,90,0.1); color: var(--gold-dark); border: 1px solid rgba(184,151,90,0.25); }
+
+    /* ─── STATE: VIEW ─── */
+    #state-view { display: none; }
+
+    .view-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .view-confetti {
+      font-size: 32px;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .view-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 28px;
+      font-weight: 500;
+      color: var(--ink);
+      line-height: 1.15;
+      letter-spacing: -0.4px;
+      margin-bottom: 6px;
+    }
+
+    .view-sub {
+      font-size: 14px;
+      font-weight: 300;
+      color: var(--ink-soft);
+    }
+
+    .view-divider {
+      width: 40px;
+      height: 2px;
+      background: var(--gold);
+      margin: 20px auto;
+    }
+
+    .video-player-wrap {
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      background: var(--ink);
+      margin-bottom: 20px;
+      box-shadow: var(--shadow-md);
+    }
+
+    .video-player-wrap video {
+      width: 100%;
+      display: block;
+      max-height: 60vh;
+      object-fit: contain;
+    }
+
+    .view-note {
+      text-align: center;
+      font-size: 13px;
+      font-weight: 300;
+      color: var(--ink-muted);
+      font-style: italic;
+      line-height: 1.6;
+    }
+
+    /* ─── STATE: SUCCESS (after upload) ─── */
+    #state-success { display: none; }
+
+    .success-inner {
+      text-align: center;
+      padding: 20px 0 8px;
+    }
+
+    .success-icon {
+      width: 64px;
+      height: 64px;
+      background: rgba(39,112,74,0.1);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      color: var(--green);
+    }
+
+    .success-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 24px;
+      font-weight: 500;
+      color: var(--ink);
+      margin-bottom: 10px;
+      letter-spacing: -0.3px;
+    }
+
+    .success-body {
+      font-size: 14px;
+      font-weight: 300;
+      color: var(--ink-soft);
+      line-height: 1.65;
+      margin-bottom: 28px;
+    }
+
+    .success-steps {
+      text-align: left;
+      background: var(--cream);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+
+    .success-steps-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--gold-dark);
+      margin-bottom: 14px;
+    }
+
+    .success-step {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(26,23,20,0.06);
+    }
+
+    .success-step:last-child { border-bottom: none; }
+
+    .success-step-num {
+      width: 20px;
+      height: 20px;
+      background: var(--ink);
+      color: var(--white);
+      border-radius: 50%;
+      font-size: 11px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .success-step p {
+      font-size: 13px;
+      font-weight: 300;
+      color: var(--ink-soft);
+      line-height: 1.5;
+    }
+
+    /* ─── STATE: ERROR ─── */
+    #state-error { display: none; }
+
+    .error-inner {
+      text-align: center;
+      padding: 20px 0 8px;
+    }
+
+    .error-icon {
+      width: 56px;
+      height: 56px;
+      background: rgba(192,57,43,0.08);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+      color: var(--red);
+    }
+
+    .error-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--ink);
+      margin-bottom: 8px;
+    }
+
+    .error-body {
+      font-size: 14px;
+      font-weight: 300;
+      color: var(--ink-soft);
+      line-height: 1.65;
+    }
+
+    /* ─── FOOTER ─── */
+    .page-footer {
+      margin-top: 28px;
+      text-align: center;
+    }
+
+    .footer-brand {
+      font-family: 'Playfair Display', serif;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--ink-muted);
+      letter-spacing: -0.2px;
+    }
+
+    .footer-brand span { color: var(--gold); }
+
+    .footer-tagline {
+      font-size: 11px;
+      color: var(--ink-muted);
+      font-weight: 300;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- Brand header -->
+  <div class="brand">
+    <a class="brand-logo" href="https://momentocards.co">Momento<span>.</span></a>
+    <div class="brand-sep"></div>
+    <span class="brand-sub">Personal Video Message</span>
+  </div>
+
+  <!-- Card container -->
+  <div class="card">
+    <div class="card-accent"></div>
+    <div class="card-body">
+
+      <!-- ── STATE: LOADING ── -->
+      <div id="state-loading">
+        <div class="spinner"></div>
+        <p class="loading-text">Opening your moment…</p>
+      </div>
+
+      <!-- ── STATE: UPLOAD ── -->
+      <div id="state-upload" style="display:none;">
+        <div class="upload-header">
+          <div class="milestone-tag" id="upload-tag">Milestone Card</div>
+          <h1 class="upload-title" id="upload-title">Add your video message.</h1>
+          <p class="upload-sub">Upload a video from your camera roll or files — it'll be waiting inside the card when they scan it.</p>
+        </div>
+
+        <!-- Error / info messages -->
+        <div class="msg error" id="msg-error"></div>
+        <div class="msg info"  id="msg-info"></div>
+
+        <!-- Drop zone -->
+        <div class="dropzone" id="dropzone">
+          <input
+            type="file"
+            id="file-input"
+            accept="video/*"
+            aria-label="Choose a video file"
+          />
+          <svg class="dropzone-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="6" y="10" width="24" height="18" rx="3"/>
+            <circle cx="18" cy="19" r="3"/>
+            <path d="M6 24l5-4 4 3 4-5 5 4"/>
+            <path d="M33 16l9 6-9 6V16z"/>
+          </svg>
+          <p class="dropzone-label">Tap to choose a video</p>
+          <p class="dropzone-hint">Select from your camera roll, Photos app, or files<br>MP4, MOV, WEBM · Max 50 MB</p>
+        </div>
+
+        <!-- File preview (shown after selection) -->
+        <div class="file-preview" id="file-preview">
+          <div class="file-preview-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>
+            </svg>
+          </div>
+          <div class="file-info">
+            <div class="file-name" id="file-name"></div>
+            <div class="file-size" id="file-size"></div>
+          </div>
+          <button class="file-clear" id="file-clear" title="Remove file" aria-label="Remove file">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Progress bar -->
+        <div class="progress-wrap" id="progress-wrap">
+          <div class="progress-label">
+            <span>Uploading…</span>
+            <span id="progress-pct">0%</span>
+          </div>
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill" id="progress-bar"></div>
+          </div>
+        </div>
+
+        <!-- Upload button -->
+        <button class="btn-upload" id="btn-upload" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+            <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+          </svg>
+          Save Video to Card
+        </button>
+      </div>
+
+      <!-- ── STATE: SUCCESS (upload complete) ── -->
+      <div id="state-success">
+        <div class="success-inner">
+          <div class="success-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+          <h2 class="success-title">Message saved!</h2>
+          <p class="success-body">Your video is now locked inside the card. When the recipient scans the QR code, your message will be waiting for them.</p>
+
+          <div class="success-steps">
+            <p class="success-steps-title">What happens next</p>
+            <div class="success-step">
+              <div class="success-step-num">1</div>
+              <p>Write something inside the card — a note, your name, or anything that feels right.</p>
+            </div>
+            <div class="success-step">
+              <div class="success-step-num">2</div>
+              <p>Give or mail the card to the person you're celebrating.</p>
+            </div>
+            <div class="success-step">
+              <div class="success-step-num">3</div>
+              <p>When they open the card and scan the QR code, your video plays instantly.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── STATE: VIEW (recipient) ── -->
+      <div id="state-view">
+        <div class="view-header">
+          <span class="view-confetti" id="view-confetti">🎉</span>
+          <h1 class="view-title" id="view-title">Congratulations!</h1>
+          <p class="view-sub" id="view-sub">You did it.</p>
+        </div>
+        <div class="view-divider"></div>
+        <div class="video-player-wrap">
+          <video id="video-player" controls playsinline preload="metadata"></video>
+        </div>
+        <p class="view-note">This message was made just for you — by someone who's proud of you.</p>
+      </div>
+
+      <!-- ── STATE: ERROR ── -->
+      <div id="state-error">
+        <div class="error-inner">
+          <div class="error-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <h2 class="error-title">Something went wrong</h2>
+          <p class="error-body" id="error-body">This card link doesn't look right. Make sure you scanned the correct QR code.</p>
+        </div>
+      </div>
+
+    </div><!-- /card-body -->
+  </div><!-- /card -->
+
+  <!-- Page footer -->
+  <div class="page-footer">
+    <p class="footer-brand">Momento<span>.</span></p>
+    <p class="footer-tagline">Celebration cards for college milestones</p>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+  /*
+  ═══════════════════════════════════════════════════════════
+  MOMENTO CARD EXPERIENCE
+  ═══════════════════════════════════════════════════════════
+
+  SETUP INSTRUCTIONS
+  ──────────────────
+  1. Create a Supabase project at https://supabase.com
+
+  2. In the Supabase SQL editor, run:
+
+     CREATE TABLE moments (
+       card_id    TEXT PRIMARY KEY,
+       video_url  TEXT NOT NULL,
+       card_type  TEXT,
+       created_at TIMESTAMPTZ DEFAULT NOW()
+     );
+
+     ALTER TABLE moments ENABLE ROW LEVEL SECURITY;
+
+     -- Allow anyone to read a moment by card_id
+     CREATE POLICY "Public read"
+       ON moments FOR SELECT
+       USING (true);
+
+     -- Allow anyone to insert (first upload only — PK prevents overwrites)
+     CREATE POLICY "Public insert"
+       ON moments FOR INSERT
+       WITH CHECK (true);
+
+  3. In Storage → Buckets, create a bucket named: momento-videos
+     Set it to PUBLIC.
+
+  4. In Storage → Policies, add two policies on the momento-videos bucket:
+     - Allow anon to SELECT (view files)
+     - Allow anon to INSERT (upload files)
+     (Use the "Custom policy" option and set the role to "anon")
+
+  5. Fill in your Supabase URL and anon key below, then deploy.
+  ═══════════════════════════════════════════════════════════
+  */
+
+  // ── CONFIG (fill these in before deploying) ─────────────
+  const SUPABASE_URL      = 'YOUR_SUPABASE_URL';
+  const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+  const BUCKET            = 'momento-videos';
+  const TABLE             = 'moments';
+  const MAX_FILE_BYTES    = 50 * 1024 * 1024; // 50 MB (Supabase free tier limit)
+  // ────────────────────────────────────────────────────────
+
+  const CARD_TYPES = {
+    intern:  { emoji: '🎉', tag: 'Career Milestone',    title: 'You Got the Internship!',  sub: 'Cheers to your first day.' },
+    dorm:    { emoji: '🏠', tag: 'New Beginnings',       title: 'First Dorm Room!',         sub: 'A happy place, made even happier.' },
+    cpa:     { emoji: '🏆', tag: 'Academic Achievement', title: 'Passed the CPA Exam!',     sub: 'Your hard work paid off.' },
+    lsat:    { emoji: '⚖️', tag: 'Academic Achievement', title: 'Passed the LSAT!',         sub: 'Future lawyer. Here we go.' },
+    default: { emoji: '🎉', tag: 'Milestone Card',       title: 'Congratulations!',         sub: 'You did it.' },
+  };
+
+  // ── DOM refs ─────────────────────────────────────────────
+  const $ = id => document.getElementById(id);
+  const states = {
+    loading: $('state-loading'),
+    upload:  $('state-upload'),
+    success: $('state-success'),
+    view:    $('state-view'),
+    error:   $('state-error'),
+  };
+
+  // ── Helpers ───────────────────────────────────────────────
+  function showState(name) {
+    Object.entries(states).forEach(([k, el]) => {
+      el.style.display = k === name ? '' : 'none';
+    });
+  }
+
+  function fmtBytes(bytes) {
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function getCardId() {
+    // Try clean URL: /c/{cardId}
+    const m = window.location.pathname.match(/\/c\/([^/?#]+)/);
+    if (m) return m[1].toLowerCase();
+    // Fallback: ?id={cardId}
+    const p = new URLSearchParams(window.location.search).get('id');
+    return p ? p.toLowerCase() : null;
+  }
+
+  function getCardType(cardId) {
+    const prefix = cardId.split('-')[0];
+    return CARD_TYPES[prefix] || CARD_TYPES.default;
+  }
+
+  function showError(msg) {
+    $('error-body').textContent = msg;
+    showState('error');
+  }
+
+  function showMsg(type, msg) {
+    const el = type === 'error' ? $('msg-error') : $('msg-info');
+    const other = type === 'error' ? $('msg-info') : $('msg-error');
+    other.classList.remove('visible');
+    el.textContent = msg;
+    el.classList.add('visible');
+  }
+
+  function clearMsg() {
+    $('msg-error').classList.remove('visible');
+    $('msg-info').classList.remove('visible');
+  }
+
+  // ── Upload state ──────────────────────────────────────────
+  let selectedFile = null;
+
+  function setFile(file) {
+    if (!file) {
+      selectedFile = null;
+      $('file-preview').classList.remove('visible');
+      $('dropzone').classList.remove('has-file');
+      $('btn-upload').disabled = true;
+      clearMsg();
+      return;
+    }
+
+    if (!file.type.startsWith('video/')) {
+      showMsg('error', 'Please choose a video file (MP4, MOV, WEBM, etc.)');
+      return;
+    }
+
+    if (file.size > MAX_FILE_BYTES) {
+      showMsg('error', `That file is ${fmtBytes(file.size)} — please keep it under 50 MB.`);
+      return;
+    }
+
+    clearMsg();
+    selectedFile = file;
+    $('file-name').textContent = file.name;
+    $('file-size').textContent = fmtBytes(file.size);
+    $('file-preview').classList.add('visible');
+    $('dropzone').classList.add('has-file');
+    $('btn-upload').disabled = false;
+  }
+
+  function setProgress(pct) {
+    const pctStr = Math.round(pct) + '%';
+    $('progress-bar').style.width = pctStr;
+    $('progress-pct').textContent = pctStr;
+    $('progress-wrap').classList.toggle('visible', pct > 0 && pct < 100);
+  }
+
+  // ── Core logic ────────────────────────────────────────────
+  async function init() {
+    // Validate config
+    if (SUPABASE_URL.startsWith('YOUR_') || SUPABASE_ANON_KEY.startsWith('YOUR_')) {
+      showState('error');
+      showError('This card experience has not been configured yet. If you're the Momento team, add your Supabase credentials to card.html.');
+      return;
+    }
+
+    const cardId = getCardId();
+    if (!cardId) {
+      showError('No card ID found. Make sure you scanned the correct QR code from inside your Momento card.');
+      return;
+    }
+
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Check if this card already has a video
+    let existing;
+    try {
+      const { data, error } = await sb
+        .from(TABLE)
+        .select('video_url, card_type')
+        .eq('card_id', cardId)
+        .maybeSingle();
+
+      if (error) throw error;
+      existing = data;
+    } catch (err) {
+      console.error(err);
+      showError('Could not reach the Momento servers. Check your connection and try again.');
+      return;
+    }
+
+    if (existing) {
+      // Video exists — show the viewer
+      showView(existing.video_url, getCardType(existing.card_type || cardId));
+    } else {
+      // No video yet — show the uploader
+      showUpload(cardId, getCardType(cardId), sb);
+    }
+  }
+
+  function showView(videoUrl, info) {
+    $('view-confetti').textContent = info.emoji;
+    $('view-title').textContent = info.title;
+    $('view-sub').textContent = info.sub;
+    $('video-player').src = videoUrl;
+    showState('view');
+  }
+
+  function showUpload(cardId, info, sb) {
+    $('upload-tag').textContent = info.tag;
+    $('upload-title').textContent = 'Add your video message.';
+    showState('upload');
+
+    const dropzone  = $('dropzone');
+    const fileInput = $('file-input');
+
+    // File input change
+    fileInput.addEventListener('change', () => {
+      setFile(fileInput.files[0] || null);
+    });
+
+    // Clear button
+    $('file-clear').addEventListener('click', () => {
+      fileInput.value = '';
+      setFile(null);
+    });
+
+    // Drag and drop
+    dropzone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropzone.classList.add('drag-over');
+    });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropzone.classList.remove('drag-over');
+      const file = e.dataTransfer?.files[0];
+      if (file) {
+        fileInput.value = ''; // reset so the change event fires cleanly
+        setFile(file);
+      }
+    });
+
+    // Upload button
+    $('btn-upload').addEventListener('click', () => doUpload(cardId, info, sb));
+  }
+
+  async function doUpload(cardId, info, sb) {
+    if (!selectedFile) return;
+
+    const btn = $('btn-upload');
+    btn.disabled = true;
+    btn.textContent = 'Uploading…';
+    clearMsg();
+    setProgress(1);
+
+    const ext      = selectedFile.name.split('.').pop() || 'mp4';
+    const path     = `${cardId}/video.${ext}`;
+
+    try {
+      // 1. Upload video to Supabase Storage
+      //    Supabase doesn't support granular progress on web client,
+      //    so we use XHR for real progress tracking.
+      const videoUrl = await uploadWithProgress(sb, path, selectedFile, pct => setProgress(pct * 0.9));
+
+      setProgress(95);
+
+      // 2. Save record in DB
+      const { error: dbErr } = await sb
+        .from(TABLE)
+        .insert({ card_id: cardId, video_url: videoUrl, card_type: cardId.split('-')[0] });
+
+      if (dbErr) {
+        // Duplicate key = card was already claimed (race condition / someone else uploaded)
+        if (dbErr.code === '23505') {
+          showMsg('info', 'This card already has a message saved. Loading it now…');
+          setTimeout(async () => {
+            const { data } = await sb.from(TABLE).select('video_url, card_type').eq('card_id', cardId).maybeSingle();
+            if (data) showView(data.video_url, getCardType(data.card_type || cardId));
+          }, 1500);
+          return;
+        }
+        throw dbErr;
+      }
+
+      setProgress(100);
+      showState('success');
+
+    } catch (err) {
+      console.error(err);
+      setProgress(0);
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg> Save Video to Card`;
+      showMsg('error', 'Upload failed — please check your connection and try again. (' + (err.message || 'Unknown error') + ')');
+    }
+  }
+
+  // XHR-based upload for real progress feedback
+  function uploadWithProgress(sb, path, file, onProgress) {
+    return new Promise((resolve, reject) => {
+      // Build the Supabase Storage upload URL manually
+      const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${encodeURIComponent(path)}`;
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', uploadUrl);
+      xhr.setRequestHeader('Authorization', `Bearer ${SUPABASE_ANON_KEY}`);
+      xhr.setRequestHeader('x-upsert', 'false');
+      xhr.setRequestHeader('Content-Type', file.type || 'video/mp4');
+
+      xhr.upload.addEventListener('progress', e => {
+        if (e.lengthComputable) onProgress(e.loaded / e.total);
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          // Get public URL
+          const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
+          resolve(publicUrl);
+        } else {
+          let msg = `Storage error ${xhr.status}`;
+          try { msg = JSON.parse(xhr.responseText).message || msg; } catch {}
+          reject(new Error(msg));
+        }
+      });
+
+      xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
+      xhr.send(file);
+    });
+  }
+
+  // ── Boot ──────────────────────────────────────────────────
+  init();
+</script>
+</body>
+</html>
